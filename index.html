@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Медиатека: Полная сохранность</title>
+    <script src="cdn.jsdelivr.net"></script>
+    <style>
+        :root {
+            --bg: #f0f2f5; --card: #ffffff; --text: #333; --accent: #6c5ce7;
+            --shadow: 0 10px 20px rgba(0,0,0,0.1); --danger: #ff7675; --success: #2ecc71;
+        }
+        body.dark-mode {
+            --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --accent: #a29bfe;
+        }
+
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; transition: 0.3s; }
+        
+        .header { text-align: center; margin-bottom: 30px; }
+        
+        .search-container { max-width: 400px; margin: 0 auto 20px; }
+        .search-input {
+            width: 100%; padding: 12px 20px; border-radius: 25px; border: 2px solid var(--accent);
+            background: var(--card); color: var(--text); outline: none; box-shadow: var(--shadow); box-sizing: border-box;
+        }
+
+        .actions-panel { display: flex; justify-content: center; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .btn-small { border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.75rem; color: white; transition: 0.2s; }
+        .btn-clear { background: var(--danger); }
+        .btn-save { background: var(--success); }
+        .btn-load { background: #3498db; }
+
+        .container { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; max-width: 1200px; margin: 0 auto; }
+        .column { background: var(--card); padding: 25px; border-radius: 20px; box-shadow: var(--shadow); }
+        
+        .add-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        input { padding: 12px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); background: var(--bg); color: var(--text); outline: none; }
+        .add-btn { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+
+        .item { display: flex; align-items: center; gap: 15px; background: var(--bg); padding: 12px; border-radius: 15px; margin-bottom: 12px; cursor: grab; }
+        .item.hidden { display: none; }
+
+        .item img { width: 60px; height: 85px; object-fit: cover; border-radius: 8px; pointer-events: none; }
+        .item-title { flex-grow: 1; font-weight: 600; pointer-events: none; }
+        
+        .delete-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1.2rem; }
+        
+        #theme-toggle { position: fixed; bottom: 20px; right: 20px; width: 55px; height: 55px; border-radius: 15px; background: var(--accent); color: white; border: none; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.2); font-size: 1.5rem; }
+        #file-input { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🎬 Моя Коллекция</h1>
+        <div class="search-container">
+            <input type="text" id="main-search" class="search-input" placeholder="Поиск по названию..." oninput="filterItems()">
+        </div>
+        <div class="actions-panel">
+            <button class="btn-small btn-save" onclick="exportData()">💾 Скачать копию</button>
+            <button class="btn-small btn-load" onclick="document.getElementById('file-input').click()">📁 Загрузить файл</button>
+            <button class="btn-small btn-clear" onclick="clearAll()">🗑️ Очистить всё</button>
+            <input type="file" id="file-input" onchange="importData(event)">
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="column">
+            <h2>Аниме</h2>
+            <div class="add-form"><input type="text" id="anime-name" placeholder="Название..."><input type="text" id="anime-img" placeholder="Ссылка на фото..."><button class="add-btn" onclick="addItem('anime')">Добавить</button></div>
+            <div id="anime-list"></div>
+        </div>
+        <div class="column">
+            <h2>Манга</h2>
+            <div class="add-form"><input type="text" id="manga-name" placeholder="Название..."><input type="text" id="manga-img" placeholder="Ссылка на фото..."><button class="add-btn" onclick="addItem('manga')">Добавить</button></div>
+            <div id="manga-list"></div>
+        </div>
+        <div class="column">
+            <h2>Фильмы</h2>
+            <div class="add-form"><input type="text" id="movie-name" placeholder="Название..."><input type="text" id="movie-img" placeholder="Ссылка на фото..."><button class="add-btn" onclick="addItem('movie')">Добавить</button></div>
+            <div id="movie-list"></div>
+        </div>
+    </div>
+
+    <button id="theme-toggle" onclick="toggleTheme()">🌓</button>
+
+    <script>
+        // Ключевой момент: загрузка данных из локальной памяти браузера
+        let db = JSON.parse(localStorage.getItem('mediaCloudDB')) || { anime: [], manga: [], movie: [] };
+
+        function render() {
+            ['anime', 'manga', 'movie'].forEach(cat => {
+                const list = document.getElementById(`${cat}-list`);
+                list.innerHTML = '';
+                db[cat].forEach((item, idx) => {
+                    list.innerHTML += `
+                        <div class="item">
+                            <img src="${item.img || 'via.placeholder.com'}" onerror="this.src='via.placeholder.com'">
+                            <span class="item-title">${item.title}</span>
+                            <button class="delete-btn" onclick="delItem('${cat}', ${idx})">✕</button>
+                        </div>
+                    `;
+                });
+
+                new Sortable(list, { animation: 150, onEnd: () => saveOrder(cat, list) });
+            });
+            // Сохранение в LocalStorage при каждом изменении
+            localStorage.setItem('mediaCloudDB', JSON.stringify(db));
+            filterItems();
+        }
+
+        function filterItems() {
+            const query = document.getElementById('main-search').value.toLowerCase();
+            document.querySelectorAll('.item').forEach(item => {
+                const title = item.querySelector('.item-title').innerText.toLowerCase();
+                item.classList.toggle('hidden', !title.includes(query));
+            });
+        }
+
+        function saveOrder(cat, listElement) {
+            const newOrder = [];
+            listElement.querySelectorAll('.item').forEach(el => {
+                newOrder.push({ title: el.querySelector('.item-title').innerText, img: el.querySelector('img').src });
+            });
+            db[cat] = newOrder;
+            localStorage.setItem('mediaCloudDB', JSON.stringify(db));
+        }
+
+        function addItem(cat) {
+            const name = document.getElementById(`${cat}-name`);
+            const img = document.getElementById(`${cat}-img`);
+            if (!name.value.trim()) return;
+            db[cat].push({ title: name.value, img: img.value });
+            name.value = ''; img.value = '';
+            render();
+        }
+
+        function delItem(cat, idx) {
+            db[cat].splice(idx, 1);
+            render();
+        }
+
+        function clearAll() {
+            if (confirm("Удалить всё?")) { db = { anime: [], manga: [], movie: [] }; render(); }
+        }
+
+        // Функции экспорта и импорта файла
+        function exportData() {
+            const blob = new Blob([JSON.stringify(db)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = "my_collection_backup.json"; a.click();
+        }
+
+        function importData(event) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    db = JSON.parse(e.target.result);
+                    render();
+                } catch(err) { alert("Неверный формат файла"); }
+            };
+            reader.readAsText(event.target.files);
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+        }
+
+        if (localStorage.getItem('theme') === 'dark') document.body.classList.add('dark-mode');
+        render();
+    </script>
+</body>
+</html>
+
+
+
+
+
